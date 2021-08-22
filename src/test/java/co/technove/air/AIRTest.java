@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
 
 // todo way more comment & section tests
 public class AIRTest {
@@ -83,12 +85,7 @@ public class AIRTest {
           "]";
 
         AIR parser = new AIR(new ByteArrayInputStream(contents.getBytes(StandardCharsets.UTF_8)));
-        try {
-            parser.getList("section.val", ValueType.DOUBLE, null);
-        } catch (IOException e) {
-            return;
-        }
-        Assertions.fail("List should fail to parse");
+		Assertions.assertThrows(AIR.InvalidConfigurationException.class, () -> parser.getList("section.val", ValueType.DOUBLE, null));
     }
 
     @Test
@@ -172,5 +169,62 @@ public class AIRTest {
 		Assertions.assertEquals(contentsParser.getInt("foo.baz", 0), 2);
 		Assertions.assertFalse(contentsParser.getBoolean("qaz.bat", true));
 		Assertions.assertEquals(contentsParser.getString("foo.qux", "nonexistent"), "nonexistent");
+	}
+
+	@FunctionalInterface
+	interface Thief<T, E extends Exception> {
+		void steal(T t) throws E;
+	}
+
+	private void errorTest(String contents) throws Exception {
+		errorTest(contents, (air) -> {});
+	}
+
+	private void errorTest(String contents, Thief<AIR, IOException> robber) throws Exception {
+		try {
+			robber.steal(new AIR(new ByteArrayInputStream(contents.getBytes(StandardCharsets.UTF_8))));
+		}catch (AIR.InvalidConfigurationException e){
+			e.printErrorMessage(System.out);
+			throw e;
+		}
+	}
+
+	@Test
+	public void invalidValueTest() {
+		Assertions.assertThrows(AIR.InvalidConfigurationException.class, () ->
+				errorTest("[foo]\n" +
+						  "bar = \"invalid value"));
+	}
+
+	@Test
+	public void invalidSectionTest() {
+		Assertions.assertThrows(AIR.InvalidConfigurationException.class, () ->
+				errorTest("[invalid_section\n" +
+						  "bar = \"qaz\""));
+	}
+
+	@Test
+	public void invalidAssignmentTest() {
+		Assertions.assertThrows(AIR.InvalidConfigurationException.class, () ->
+				errorTest("[foo]\n" +
+						  "an -> \"invalid assignment\""));
+	}
+
+	@Test
+	public void unexpectedTypeTest() {
+		Assertions.assertThrows(AIR.InvalidConfigurationException.class, () ->
+				errorTest("[foo]\n" +
+						  "bar = \"will retrieve an int\"", (air) -> air.getInt("foo.bar", 0)));
+	}
+
+	@Test
+	public void differentListMemberTest() {
+		Assertions.assertThrows(AIR.InvalidConfigurationException.class, () ->
+				errorTest("[invalid]\n" +
+						  "list = [\n" +
+						  "-4.1,\n" +
+						  "\"member\",\n" +
+						  "15.3,\n" +
+						  "]", (air) -> air.getList("invalid.list", ValueType.DOUBLE, null)));
 	}
 }

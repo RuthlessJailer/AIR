@@ -57,7 +57,7 @@ public abstract class ValueType<T> {
         public Optional<String> apply(String str) {
             if (str.length() >= 2 && str.startsWith("\"")) {
                 if (!str.endsWith("\"")) {
-                    throw new RuntimeException("Missing ending quote");
+                    return Optional.empty(); // thrown further up for a more descriptive error message
                 }
                 return Optional.of(str.substring(1, str.length() - 1));
             }
